@@ -673,6 +673,7 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
         xCol = GetAppColor(AppColor::TabBackgroundCloseX);
         circleCol = GetAppColor(AppColor::TabBackgroundCloseCircle);
 
+        int selectedTabIdx = SelectedTabIdx();
         if (selectedTabIdx == i) {
             bgCol = GetAppColor(AppColor::TabSelectedBg);
             textCol = GetAppColor(AppColor::TabSelectedText);
@@ -730,6 +731,11 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
 
 int TabPainter::Count() {
     int n = tabsCtrl->GetTabCount();
+    return n;
+}
+
+int TabPainter::SelectedTabIdx() {
+    int n = tabsCtrl->GetSelectedTabIndex();
     return n;
 }
 
@@ -801,14 +807,15 @@ static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
     NMHDR* hdr = (NMHDR*)lp;
     UINT code = hdr->code;
 
+    int selectedTabIdx = w->tabPainter->SelectedTabIdx();
+
     logf("TabsCtrl2:Handle_WM_NOTIFY: code=%d (%s)\n", (int)code, CodeToString);
     if (TCN_SELCHANGING == code) {
         TabPainter* tab = w->tabPainter;
         // if we have permission to select the tab
         // TODO: Should we allow the switch of the tab if we are in process of printing?
-        tab->Invalidate(tab->selectedTabIdx);
+        //tab->Invalidate(tab->selectedTabIdx);
         tab->Invalidate(tab->nextTab);
-        tab->selectedTabIdx = tab->nextTab;
     }
 
     if (w->onNotify) {
@@ -866,16 +873,6 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
     TabPainter* tab = w->tabPainter;
 
     switch (msg) {
-        case TCM_INSERTITEM:
-            index = (int)wp;
-            if (index <= tab->selectedTabIdx) {
-                tab->selectedTabIdx++;
-            }
-            tab->xClicked = -1;
-            InvalidateRgn(hwnd, nullptr, FALSE);
-            UpdateWindow(hwnd);
-            break;
-
         case TCM_SETITEM:
             // TODO: this should not be necessary
             index = (int)wp;
@@ -887,25 +884,8 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
 
         case TCM_DELETEITEM:
             // TODO: this should not be necessary
-            index = (int)wp;
-            if (index < tab->selectedTabIdx) {
-                tab->selectedTabIdx--;
-            } else if (index == tab->selectedTabIdx) {
-                tab->selectedTabIdx = -1;
-            }
             tab->xClicked = -1;
-            if (tab->Count()) {
-                InvalidateRgn(hwnd, nullptr, FALSE);
-                UpdateWindow(hwnd);
-            }
-            break;
-
-        case TCM_DELETEALLITEMS:
-            tab->selectedTabIdx = -1;
-            tab->highlighted = -1;
-            tab->xClicked = -1;
-            tab->xHighlighted = -1;
-            InvalidateRgn(hwnd, nullptr, FALSE);
+            InvalidateRect(hwnd, nullptr, FALSE);
             UpdateWindow(hwnd);
             break;
 
@@ -918,22 +898,6 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
                 }
             }
             break;
-
-        case TCM_SETCURSEL: {
-            index = (int)wp;
-            CrashIf(index >= tab->Count());
-            if (index >= tab->Count()) {
-                return;
-            }
-            int previous = tab->selectedTabIdx;
-            if (index != tab->selectedTabIdx) {
-                tab->Invalidate(tab->selectedTabIdx);
-                tab->Invalidate(index);
-                tab->selectedTabIdx = index;
-                UpdateWindow(hwnd);
-            }
-            return;
-        }
 
         case WM_NCHITTEST: {
             if (!tab->inTitlebar || hwnd == GetCapture()) {
@@ -1007,9 +971,10 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
                 tab->Invalidate(tab->nextTab);
                 tab->xClicked = tab->nextTab;
             } else if (tab->nextTab != -1) {
-                if (tab->nextTab != tab->selectedTabIdx) {
+                int selectedIdx = tab->SelectedTabIdx();
+                if (tab->nextTab != selectedIdx) {
                     // send request to select tab
-                    SendNotification(w, TCN_SELCHANGING, -1, -1);
+                    w->SetSelectedTabByIndex(tab->nextTab);
                 }
                 tab->isDragging = true;
                 SetCapture(hwnd);
@@ -1118,6 +1083,11 @@ int TabsCtrl2::InsertTab(int idx, std::string_view sv) {
     AutoFreeWstr s = strconv::Utf8ToWstr(sv);
     item.pszText = s.Get();
     int insertedIdx = TabCtrl_InsertItem(hwnd, idx, &item);
+
+    tabPainter->xClicked = -1;
+    InvalidateRect(hwnd, nullptr, FALSE);
+    UpdateWindow(hwnd);
+
     return insertedIdx;
 }
 
@@ -1130,6 +1100,13 @@ void TabsCtrl2::RemoveTab(int idx) {
 
 void TabsCtrl2::RemoveAllTabs() {
     TabCtrl_DeleteAllItems(hwnd);
+
+    TabPainter* tab = tabPainter;
+    tab->highlighted = -1;
+    tab->xClicked = -1;
+    tab->xHighlighted = -1;
+    InvalidateRect(hwnd, nullptr, FALSE);
+    UpdateWindow(hwnd);
 }
 
 // TODO: remove in favor of std::string_view version
@@ -1179,6 +1156,12 @@ int TabsCtrl2::GetSelectedTabIndex() {
 int TabsCtrl2::SetSelectedTabByIndex(int idx) {
     int prevSelectedIdx = TabCtrl_SetCurSel(hwnd, idx);
     logf("TabsCtrl2::SetSelectedTabByIndex: idx=%d, prev=%d\n", idx, prevSelectedIdx);
+
+    TabPainter* tab = tabPainter;
+    tab->Invalidate(idx);
+    tab->Invalidate(prevSelectedIdx);
+    UpdateWindow(hwnd);
+
     return prevSelectedIdx;
 }
 

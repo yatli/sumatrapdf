@@ -76,7 +76,6 @@ struct TabPainter {
     int height{-1};
     HWND hwnd{nullptr};
 
-    int selectedTabIdx{-1};
     int highlighted{-1};
     int xClicked{-1};
     int xHighlighted{-1};
@@ -93,6 +92,7 @@ struct TabPainter {
     void Invalidate(int index);
     void Paint(HDC hdc, RECT& rc);
     int Count();
+    int SelectedTabIdx();
 };
 
 struct TabsCtrl2 : WindowBase {

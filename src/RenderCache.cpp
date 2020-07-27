@@ -106,8 +106,7 @@ bool RenderCache::DropCacheEntry(BitmapCacheEntry* entry) {
     }
     CrashIf(entry->refs != 0);
     CrashIf(cache[idx] != entry);
-    dbglogf("RenderCache::DropCacheEntry: pageNo: %d, rotation: %d, zoom: %.2f\n", entry->pageNo, entry->rotation,
-            entry->zoom);
+    //dbglogf("RenderCache::DropCacheEntry: pageNo: %d, rotation: %d, zoom: %.2f\n", entry->pageNo, entry->rotation, entry->zoom);
 
     delete entry;
 
@@ -238,7 +237,7 @@ static bool IsTileVisible(DisplayModel* dm, int pageNo, TilePosition tile, float
 /* Free all bitmaps in the cache that are of a specific page (or all pages
    of the given DisplayModel, or even all invisible pages). */
 void RenderCache::FreePage(DisplayModel* dm, int pageNo, TilePosition* tile) {
-    dbglogf("RenderCache::FreePage: dm: 0x%p, pageNo: %d\n", dm, pageNo);
+    // dbglogf("RenderCache::FreePage: dm: 0x%p, pageNo: %d\n", dm, pageNo);
     ScopedCritSec scope(&cacheAccess);
 
     // must go from end becaues freeing changes the cache
@@ -367,7 +366,8 @@ USHORT RenderCache::GetMaxTileRes(DisplayModel* dm, int pageNo, int rotation) {
 
 // reduce the size of tiles in order to hopefully use less memory overall
 bool RenderCache::ReduceTileSize() {
-    dbglogf("RenderCache::ReduceTileSize(): reducing tile size (current: %d x %d)\n", maxTileSize.dx, maxTileSize.dy);
+    // dbglogf("RenderCache::ReduceTileSize(): reducing tile size (current: %d x %d)\n", maxTileSize.dx,
+    // maxTileSize.dy);
     if (maxTileSize.dx < 200 || maxTileSize.dy < 200) {
         return false;
     }
@@ -412,7 +412,7 @@ void RenderCache::RequestRendering(DisplayModel* dm, int pageNo) {
 
 /* Render a bitmap for page <pageNo> in <dm>. */
 void RenderCache::RequestRendering(DisplayModel* dm, int pageNo, TilePosition tile, bool clearQueueForPage) {
-    dbglogf("RenderCache::RequestRendering(): pageNo %d\n", pageNo);
+    // dbglogf("RenderCache::RequestRendering(): pageNo %d\n", pageNo);
     ScopedCritSec scope(&requestAccess);
     CrashIf(!dm);
     if (!dm || dm->dontRenderFlag) {
@@ -477,7 +477,7 @@ void RenderCache::Render(DisplayModel* dm, int pageNo, int rotation, float zoom,
 
 bool RenderCache::Render(DisplayModel* dm, int pageNo, int rotation, float zoom, TilePosition* tile, RectF* pageRect,
                          RenderingCallback* renderCb) {
-    dbglogf("RenderCache::Render(): pageNo %d\n", pageNo);
+    // dbglogf("RenderCache::Render(): pageNo %d\n", pageNo);
     CrashIf(!dm);
     if (!dm || dm->dontRenderFlag) {
         return false;
@@ -865,7 +865,7 @@ int RenderCache::Paint(HDC hdc, Rect bounds, DisplayModel* dm, int pageNo, PageI
         }
         // free tiles with different resolution
         TilePosition tile(targetRes, (USHORT)-1, 0);
-        dbglogf("RenderCache::Paint: calling FreePage() pageNo: %d\n", pageNo);
+        // dbglogf("RenderCache::Paint: calling FreePage() pageNo: %d\n", pageNo);
         FreePage(dm, pageNo, &tile);
     }
     FreeNotVisible();
