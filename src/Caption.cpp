@@ -601,15 +601,6 @@ static void DrawCaptionButton(DRAWITEMSTRUCT* item, WindowInfo* win) {
     buffer.Flush(item->hDC);
 }
 
-void PaintParentBackground(HWND hwnd, HDC hdc) {
-    HWND parent = GetParent(hwnd);
-    POINT pt = {0, 0};
-    MapWindowPoints(hwnd, parent, &pt, 1);
-    SetViewportOrgEx(hdc, -pt.x, -pt.y, &pt);
-    SendMessageW(parent, WM_ERASEBKGND, (WPARAM)hdc, 0);
-    SetViewportOrgEx(hdc, pt.x, pt.y, nullptr);
-}
-
 static void PaintCaptionBackground(HDC hdc, WindowInfo* win, bool useDoubleBuffer) {
     RECT rClip;
     GetClipBox(hdc, &rClip);

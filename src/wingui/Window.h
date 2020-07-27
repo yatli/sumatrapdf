@@ -86,7 +86,8 @@ struct WmCommandEvent : WndEvent {
 typedef std::function<void(WmCommandEvent*)> WmCommandHandler;
 
 struct WmNotifyEvent : WndEvent {
-    NMTREEVIEWW* treeView = nullptr;
+    NMHDR* nmhdr;
+    UINT code;
 };
 
 typedef std::function<void(WmNotifyEvent*)> WmNotifyHandler;

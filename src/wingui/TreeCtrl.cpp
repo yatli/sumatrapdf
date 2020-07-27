@@ -222,19 +222,19 @@ static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
     ev->w = w;
     LPARAM lp = ev->lp;
     NMTREEVIEWW* nmtv = (NMTREEVIEWW*)(lp);
+    UINT code = nmtv->hdr.code;
 
     if (w->onNotify) {
         WmNotifyEvent a{};
         CopyWndEvent cp(&a, ev);
-        a.treeView = nmtv;
+        a.nmhdr = (NMHDR*)lp;
+        a.code = code;
 
         w->onNotify(&a);
         if (a.didHandle) {
             return;
         }
     }
-
-    auto code = nmtv->hdr.code;
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/tvn-getinfotip
     if (code == TVN_GETINFOTIP) {

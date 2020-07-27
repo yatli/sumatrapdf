@@ -50,9 +50,48 @@ SIZE GetIdealSize(TabsCtrl*);
 void SetPos(TabsCtrl*, RECT&);
 void SetFont(TabsCtrl*, HFONT);
 
+/* TabsCtrl2 */
+
+#define T_CLOSING (TCN_LAST + 1)
+#define T_CLOSE (TCN_LAST + 2)
+#define T_DRAG (TCN_LAST + 3)
+
+struct TabsCtrl2;
+
+constexpr COLORREF kDefaultTabBgCol = (COLORREF)-1;
+
+struct TabPainter {
+    TabsCtrl2* tabsCtrl{nullptr};
+    Gdiplus::PathData* data{nullptr};
+    int width{-1};
+    int height{-1};
+    HWND hwnd{nullptr};
+
+    int selectedTabIdx{-1};
+    int highlighted{-1};
+    int xClicked{-1};
+    int xHighlighted{-1};
+    int nextTab{-1};
+    bool isDragging{false};
+    bool inTitlebar{false};
+    LPARAM mouseCoordinates{0};
+    COLORREF currBgCol{kDefaultTabBgCol};
+
+    TabPainter(TabsCtrl2* ctrl, Size tabSize);
+    ~TabPainter();
+    bool Reshape(int dx, int dy);
+    int IndexFromPoint(int x, int y, bool* inXbutton = nullptr);
+    void Invalidate(int index);
+    void Paint(HDC hdc, RECT& rc);
+    int Count();
+};
+
 struct TabsCtrl2 : WindowBase {
     str::WStr lastTabText;
     bool createToolTipsHwnd{false};
+    Size tabSize{32, 64};
+
+    TabPainter* tabPainter{nullptr};
 
     // for all WM_NOTIFY messages
     WmNotifyHandler onNotify{nullptr};
@@ -79,7 +118,7 @@ struct TabsCtrl2 : WindowBase {
     int GetSelectedTabIndex();
     int SetSelectedTabByIndex(int idx);
 
-    void SetItemSize(Size sz);
+    void SetTabSize(Size sz);
     int GetTabCount();
 
     void SetToolTipsHwnd(HWND);

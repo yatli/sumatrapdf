@@ -2292,3 +2292,12 @@ void TbSetMetrics(HWND hwnd, TBMETRICS* metrics) {
     LPARAM lp = (LPARAM)metrics;
     SendMessageW(hwnd, TB_SETMETRICS, 0, lp);
 }
+
+void PaintParentBackground(HWND hwnd, HDC hdc) {
+    HWND parent = GetParent(hwnd);
+    POINT pt = {0, 0};
+    MapWindowPoints(hwnd, parent, &pt, 1);
+    SetViewportOrgEx(hdc, -pt.x, -pt.y, &pt);
+    SendMessageW(parent, WM_ERASEBKGND, (WPARAM)hdc, 0);
+    SetViewportOrgEx(hdc, pt.x, pt.y, nullptr);
+}

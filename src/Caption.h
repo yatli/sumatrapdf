@@ -7,7 +7,6 @@
 void CreateCaption(WindowInfo* win);
 void RegisterCaptionWndClass();
 LRESULT CustomCaptionFrameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, bool* callDef, WindowInfo* win);
-void PaintParentBackground(HWND hwnd, HDC hdc);
 void RelayoutCaption(WindowInfo* win);
 void SetCaptionButtonsRtl(CaptionInfo*, bool isRtl);
 void CaptionUpdateUI(WindowInfo*, CaptionInfo*);

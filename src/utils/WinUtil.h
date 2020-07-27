@@ -277,3 +277,5 @@ void TbSetPadding(HWND, int padX, int padY);
 void TbGetMetrics(HWND hwnd, TBMETRICS* metrics);
 void TbSetMetrics(HWND hwnd, TBMETRICS* metrics);
 void TbGetRect(HWND hwnd, int buttonId, RECT* rc);
+
+void PaintParentBackground(HWND hwnd, HDC hdc);
