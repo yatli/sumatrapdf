@@ -52,9 +52,18 @@ void SetFont(TabsCtrl*, HFONT);
 
 /* TabsCtrl2 */
 
-#define T_CLOSING (TCN_LAST + 1)
-#define T_CLOSE (TCN_LAST + 2)
-#define T_DRAG (TCN_LAST + 3)
+// TCN_ range is (0u - 550U) => (0U - 580U)
+// only -550u => -554u is used
+constexpr uint T_CLOSING = (0U - 579U);
+constexpr uint T_CLOSE = (0U - 578U);
+constexpr uint T_DRAG = (0U - 577U);
+
+// this is pointed by lparam in WM_NOTIFY notification
+struct TabNotifyInfo {
+    NMHDR nmhdr;
+    int tabIdx1;
+    int tabIdx2;
+};
 
 struct TabsCtrl2;
 

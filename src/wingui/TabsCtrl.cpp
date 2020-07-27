@@ -5,6 +5,7 @@
 #include "utils/ScopedWin.h"
 #include "utils/Dpi.h"
 #include "utils/WinUtil.h"
+#include "utils/Log.h"
 
 #include "wingui/WinGui.h"
 #include "wingui/Layout.h"
@@ -585,6 +586,8 @@ int TabPainter::IndexFromPoint(int x, int y, bool* inXbutton) {
 
 // Invalidates the tab's region in the client area.
 void TabPainter::Invalidate(int index) {
+    InvalidateRect(hwnd, nullptr, FALSE);
+#if 0
     if (index < 0) {
         return;
     }
@@ -602,6 +605,7 @@ void TabPainter::Invalidate(int index) {
     HRGN hRgn = region.GetHRGN(&gfx);
     InvalidateRgn(hwnd, hRgn, FALSE);
     DeleteObject(hRgn);
+#endif
 }
 
 // Paints the tabs that intersect the window's update rectangle.
@@ -626,7 +630,12 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
     XFORM ctm = {1.0, 0, 0, 1.0, 0, 0};
     SetWorldTransform(hdc, &ctm);
 
+    COLORREF bgCol, textCol, xCol, circleCol;
+
     Graphics gfx(hdc);
+    bgCol = GetAppColor(AppColor::TabBackgroundBg);
+    gfx.Clear(GdiRgbFromCOLORREF(bgCol));
+
     gfx.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
     gfx.SetCompositingQuality(CompositingQualityHighQuality);
     gfx.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
@@ -639,7 +648,7 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
     SolidBrush br(Color(0, 0, 0));
     Pen pen(&br, 2.0f);
 
-    Font f(hdc, GetDefaultGuiFont());
+    Font f(hdc, tabsCtrl->hfont);
     // TODO: adjust these constant values for DPI?
     Gdiplus::RectF layout((float)DpiScale(hwnd, 3), 1.0f, float(width - DpiScale(hwnd, 20)), (float)height);
     StringFormat sf(StringFormat::GenericDefault());
@@ -648,7 +657,9 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
     sf.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
 
     float yPosTab = inTitlebar ? 0.0f : float(ClientRect(hwnd).dy - height - 1);
-    for (int i = 0; i < Count(); i++) {
+    int nTabs = Count();
+    logf("TabPainter::Paint: nTabs=%d\n", nTabs);
+    for (int i = 0; i < nTabs; i++) {
         gfx.ResetTransform();
         gfx.TranslateTransform(1.f + (float)(width + 1) * i - (float)rc.left, yPosTab - (float)rc.top);
 
@@ -657,29 +668,29 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
         }
 
         // Get the correct colors based on the state and the current theme
-        COLORREF bgCol = GetAppColor(AppColor::TabBackgroundBg);
-        COLORREF textCol = GetAppColor(AppColor::TabBackgroundText);
-        COLORREF xColor = GetAppColor(AppColor::TabBackgroundCloseX);
-        COLORREF circleColor = GetAppColor(AppColor::TabBackgroundCloseCircle);
+        bgCol = GetAppColor(AppColor::TabBackgroundBg);
+        textCol = GetAppColor(AppColor::TabBackgroundText);
+        xCol = GetAppColor(AppColor::TabBackgroundCloseX);
+        circleCol = GetAppColor(AppColor::TabBackgroundCloseCircle);
 
         if (selectedTabIdx == i) {
             bgCol = GetAppColor(AppColor::TabSelectedBg);
             textCol = GetAppColor(AppColor::TabSelectedText);
-            xColor = GetAppColor(AppColor::TabSelectedCloseX);
-            circleColor = GetAppColor(AppColor::TabSelectedCloseCircle);
+            xCol = GetAppColor(AppColor::TabSelectedCloseX);
+            circleCol = GetAppColor(AppColor::TabSelectedCloseCircle);
         } else if (highlighted == i) {
             bgCol = GetAppColor(AppColor::TabHighlightedBg);
             textCol = GetAppColor(AppColor::TabHighlightedText);
-            xColor = GetAppColor(AppColor::TabHighlightedCloseX);
-            circleColor = GetAppColor(AppColor::TabHighlightedCloseCircle);
+            xCol = GetAppColor(AppColor::TabHighlightedCloseX);
+            circleCol = GetAppColor(AppColor::TabHighlightedCloseCircle);
         }
         if (xHighlighted == i) {
-            xColor = GetAppColor(AppColor::TabHoveredCloseX);
-            circleColor = GetAppColor(AppColor::TabHoveredCloseCircle);
+            xCol = GetAppColor(AppColor::TabHoveredCloseX);
+            circleCol = GetAppColor(AppColor::TabHoveredCloseCircle);
         }
         if (xClicked == i) {
-            xColor = GetAppColor(AppColor::TabClickedCloseX);
-            circleColor = GetAppColor(AppColor::TabClickedCloseCircle);
+            xCol = GetAppColor(AppColor::TabClickedCloseX);
+            circleCol = GetAppColor(AppColor::TabClickedCloseCircle);
         }
 
         // paint tab's body
@@ -705,13 +716,13 @@ void TabPainter::Paint(HDC hdc, RECT& rc) {
         iterator.NextMarker(&shape);
         // bool closeCircleEnabled = true;
         if ((xClicked == i || xHighlighted == i) /*&& closeCircleEnabled*/) {
-            br.SetColor(GdiRgbFromCOLORREF(circleColor));
+            br.SetColor(GdiRgbFromCOLORREF(circleCol));
             gfx.FillPath(&br, &shape);
         }
 
         // paint "x"
         iterator.NextMarker(&shape);
-        pen.SetColor(GdiRgbFromCOLORREF(xColor));
+        pen.SetColor(GdiRgbFromCOLORREF(xCol));
         gfx.DrawPath(&pen, &shape);
         iterator.Rewind();
     }
@@ -724,6 +735,26 @@ int TabPainter::Count() {
 
 Kind kindTabs = "tabs";
 
+static void SendNotification(TabsCtrl2* tabsCtrl, uint code, int tab1, int tab2) {
+    if (!tabsCtrl->onNotify) {
+        return;
+    }
+    TabNotifyInfo info;
+    info.nmhdr.hwndFrom = tabsCtrl->hwnd;
+    info.nmhdr.idFrom = tabsCtrl->ctrlID;
+    info.nmhdr.code = code;
+    info.tabIdx1 = tab1;
+    info.tabIdx2 = tab2;
+    WmNotifyEvent ev{};
+    ev.w = tabsCtrl;
+    ev.hwnd = GetParent(tabsCtrl->hwnd);
+    ev.msg = WM_NOTIFY;
+    ev.code = code;
+    ev.nmhdr = &info.nmhdr;
+    ev.lp = (LPARAM)&info;
+    tabsCtrl->onNotify(&ev);
+}
+
 TabsCtrl2::TabsCtrl2(HWND p) : WindowBase(p) {
     dwStyle = WS_CHILD | WS_CLIPSIBLINGS | TCS_FOCUSNEVER | TCS_FIXEDWIDTH | TCS_FORCELABELLEFT | WS_VISIBLE;
     winClass = WC_TABCONTROLW;
@@ -734,6 +765,31 @@ TabsCtrl2::~TabsCtrl2() {
     delete tabPainter;
 }
 
+const char* CodeToString(uint code) {
+    if (code == TCN_SELCHANGE) {
+        return "TCN_SELCHANGE";
+    }
+    if (code == TCN_SELCHANGING) {
+        return "TCN_SELCHANGING";
+    }
+    if (code == TCN_GETOBJECT) {
+        return "TCN_GETOBJECT";
+    }
+    if (code == TCN_FOCUSCHANGE) {
+        return "TCN_FOCUSCHANGE";
+    }
+    if (code == NM_CLICK) {
+        return "NM_CLICK";
+    }
+    if (code == NM_DBLCLK) {
+        return "NM_DBLCLK";
+    }
+    if (code == NM_RELEASEDCAPTURE) {
+        return "NM_RELEASEDCAPTURE";
+    }
+    return "";
+}
+
 static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
     uint msg = ev->msg;
 
@@ -742,7 +798,35 @@ static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
     TabsCtrl2* w = (TabsCtrl2*)user;
     ev->w = w;
     LPARAM lp = ev->lp;
+    NMHDR* hdr = (NMHDR*)lp;
+    UINT code = hdr->code;
 
+    logf("TabsCtrl2:Handle_WM_NOTIFY: code=%d (%s)\n", (int)code, CodeToString);
+    if (TCN_SELCHANGING == code) {
+        TabPainter* tab = w->tabPainter;
+        // if we have permission to select the tab
+        // TODO: Should we allow the switch of the tab if we are in process of printing?
+        tab->Invalidate(tab->selectedTabIdx);
+        tab->Invalidate(tab->nextTab);
+        tab->selectedTabIdx = tab->nextTab;
+    }
+
+    if (w->onNotify) {
+        WmNotifyEvent a{};
+        CopyWndEvent cp(&a, ev);
+        a.nmhdr = (NMHDR*)lp;
+        a.code = code;
+
+        w->onNotify(&a);
+        if (a.didHandle) {
+            return;
+        }
+    }
+
+    if (TCN_SELCHANGING == code) {
+        // send notification that the tab is selected
+        SendNotification(w, TCN_SELCHANGE, -1, -1);
+    }
     CrashIf(GetParent(w->hwnd) != (HWND)ev->hwnd);
 }
 
@@ -821,6 +905,8 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
             tab->highlighted = -1;
             tab->xClicked = -1;
             tab->xHighlighted = -1;
+            InvalidateRgn(hwnd, nullptr, FALSE);
+            UpdateWindow(hwnd);
             break;
 
         case TCM_SETITEMSIZE:
@@ -835,9 +921,8 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
 
         case TCM_SETCURSEL: {
             index = (int)wp;
+            CrashIf(index >= tab->Count());
             if (index >= tab->Count()) {
-                ev->result = -1;
-                ev->didHandle = true;
                 return;
             }
             int previous = tab->selectedTabIdx;
@@ -847,8 +932,7 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
                 tab->selectedTabIdx = index;
                 UpdateWindow(hwnd);
             }
-            ev->result = previous;
-            ev->didHandle = true;
+            return;
         }
 
         case WM_NCHITTEST: {
@@ -891,11 +975,8 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
             if (tab->highlighted != hl) {
                 if (tab->isDragging) {
                     // send notification if the highlighted tab is dragged over another
-                    /*
-                    WindowInfo* win = FindWindowInfoByHwnd(hwnd);
                     int tabNo = tab->highlighted;
-                    uitask::Post([=] { TabNotification(win, T_DRAG, tabNo, hl); });
-                    */
+                    SendNotification(w, T_DRAG, tabNo, hl);
                 }
 
                 tab->Invalidate(hl);
@@ -916,34 +997,31 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
             return;
 
         case WM_LBUTTONDOWN:
-#if 0
             bool inX;
             tab->nextTab = tab->IndexFromPoint(GET_X_LPARAM(lp), GET_Y_LPARAM(lp), &inX);
             if (inX) {
                 // send request to close the tab
-                WindowInfo* win = FindWindowInfoByHwnd(hwnd);
                 int next = tab->nextTab;
-                uitask::Post([=] { TabNotification(win, T_CLOSING, next, -1); });
+                // if we have permission to close the tab
+                SendNotification(w, T_CLOSING, next, -1);
+                tab->Invalidate(tab->nextTab);
+                tab->xClicked = tab->nextTab;
             } else if (tab->nextTab != -1) {
                 if (tab->nextTab != tab->selectedTabIdx) {
                     // send request to select tab
-                    WindowInfo* win = FindWindowInfoByHwnd(hwnd);
-                    uitask::Post([=] { TabNotification(win, TCN_SELCHANGING, -1, -1); });
+                    SendNotification(w, TCN_SELCHANGING, -1, -1);
                 }
                 tab->isDragging = true;
                 SetCapture(hwnd);
             }
-#endif
             ev->didHandle = true;
             return;
 
         case WM_LBUTTONUP:
-#if 0
             if (tab->xClicked != -1) {
                 // send notification that the tab is closed
-                WindowInfo* win = FindWindowInfoByHwnd(hwnd);
                 int clicked = tab->xClicked;
-                uitask::Post([=] { TabNotification(win, T_CLOSE, clicked, -1); });
+                SendNotification(w, T_CLOSE, clicked, -1);
                 tab->Invalidate(clicked);
                 tab->xClicked = -1;
             }
@@ -951,35 +1029,28 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
                 tab->isDragging = false;
                 ReleaseCapture();
             }
-#endif
             ev->didHandle = true;
             return;
 
         case WM_MBUTTONDOWN:
-#if 0
             // middle-clicking unconditionally closes the tab
             {
                 tab->nextTab = tab->IndexFromPoint(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
                 // send request to close the tab
-                WindowInfo* win = FindWindowInfoByHwnd(hwnd);
                 int next = tab->nextTab;
-                uitask::Post([=] { TabNotification(win, T_CLOSING, next, -1); });
+                SendNotification(w, T_CLOSING, next, -1);
             }
-#endif
             ev->didHandle = true;
             return;
 
         case WM_MBUTTONUP:
-#if 0
             if (tab->xClicked != -1) {
                 // send notification that the tab is closed
-                WindowInfo* win = FindWindowInfoByHwnd(hwnd);
                 int clicked = tab->xClicked;
-                uitask::Post([=] { TabNotification(win, T_CLOSE, clicked, -1); });
+                SendNotification(w, T_CLOSE, clicked, -1);
                 tab->Invalidate(clicked);
                 tab->xClicked = -1;
             }
-#endif
             ev->didHandle = true;
             return;
 
@@ -1006,16 +1077,15 @@ void TabsCtrl2::WndProc(WndEvent* ev) {
             return;
         }
 
-        case WM_SIZE: {
 #if 0
+        case WM_SIZE: {
             WindowInfo* win = FindWindowInfoByHwnd(hwnd);
             if (win) {
                 UpdateTabWidth(win);
             }
         }
-#endif
             break;
-        }
+#endif
     }
 }
 
@@ -1102,11 +1172,13 @@ WCHAR* TabsCtrl2::GetTabText(int idx) {
 
 int TabsCtrl2::GetSelectedTabIndex() {
     int idx = TabCtrl_GetCurSel(hwnd);
+    logf("TabsCtrl2::GetSelectedTabIndex: idx=%d\n", idx);
     return idx;
 }
 
 int TabsCtrl2::SetSelectedTabByIndex(int idx) {
     int prevSelectedIdx = TabCtrl_SetCurSel(hwnd, idx);
+    logf("TabsCtrl2::SetSelectedTabByIndex: idx=%d, prev=%d\n", idx, prevSelectedIdx);
     return prevSelectedIdx;
 }
 

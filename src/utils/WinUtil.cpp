@@ -2297,7 +2297,9 @@ void PaintParentBackground(HWND hwnd, HDC hdc) {
     HWND parent = GetParent(hwnd);
     POINT pt = {0, 0};
     MapWindowPoints(hwnd, parent, &pt, 1);
+    // TODO: no idea why SetViewportOrgEx()
     SetViewportOrgEx(hdc, -pt.x, -pt.y, &pt);
     SendMessageW(parent, WM_ERASEBKGND, (WPARAM)hdc, 0);
     SetViewportOrgEx(hdc, pt.x, pt.y, nullptr);
+    InvalidateRect(hwnd, nullptr, true);
 }

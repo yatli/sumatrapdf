@@ -78,42 +78,73 @@ static void SwapTabs(WindowInfo* win, int tab1, int tab2) {
     win->tabsCtrl->SetSelectedTabByIndex(newSelected);
 }
 
-static void TabNotification(WindowInfo* win, UINT code, int idx1, int idx2) {
-    if (!WindowInfoStillValid(win)) {
-        return;
+static void RemoveTab(WindowInfo* win, int idx) {
+    TabInfo* tab = win->tabs.at(idx);
+    UpdateTabFileDisplayStateForTab(tab);
+    win->tabSelectionHistory->Remove(tab);
+    win->tabs.Remove(tab);
+    if (tab == win->currentTab) {
+        win->ctrl = nullptr;
+        win->currentTab = nullptr;
     }
-    NMHDR nmhdr = {nullptr, 0, code};
-    if (TabsOnNotify(win, (LPARAM)&nmhdr, idx1, idx2)) {
-        return;
+    delete tab;
+    win->tabsCtrl->RemoveTab(idx);
+    UpdateTabWidth(win);
+}
+
+// On tab selection, we save the data for the tab which is losing selection and
+// load the data of the selected tab into the WindowInfo.
+static void TabsOnNotify(WindowInfo* win, WmNotifyEvent* ev) {
+    NMHDR* data = ev->nmhdr;
+    TabNotifyInfo* notifyInfo = (TabNotifyInfo*)ev->lp;
+    int current;
+
+    switch (data->code) {
+        case TCN_SELCHANGING:
+            // TODO: Should we allow the switch of the tab if we are in process of printing?
+            SaveCurrentTabInfo(win);
+            return;
+
+        case TCN_SELCHANGE:
+            current = win->tabsCtrl->GetSelectedTabIndex();
+            LoadModelIntoTab(win->tabs.at(current));
+            break;
+
+#if 0
+        case T_CLOSING:
+            // allow the closure
+            return;
+#endif
+        case T_CLOSE: {
+            int tab1 = notifyInfo->tabIdx1;
+            current = win->tabsCtrl->GetSelectedTabIndex();
+            if (tab1 == current) {
+                CloseTab(win);
+            } else {
+                RemoveTab(win, tab1);
+            }
+        } break;
+
+        case T_DRAG: {
+            int tab1 = notifyInfo->tabIdx1;
+            int tab2 = notifyInfo->tabIdx2;
+            SwapTabs(win, tab1, tab2);
+        } break;
     }
-    TabPainter* tab = win->tabsCtrl->tabPainter;
-    if (T_CLOSING == code) {
-        // if we have permission to close the tab
-        tab->Invalidate(tab->nextTab);
-        tab->xClicked = tab->nextTab;
-        return;
-    }
-    if (TCN_SELCHANGING == code) {
-        // if we have permission to select the tab
-        tab->Invalidate(tab->selectedTabIdx);
-        tab->Invalidate(tab->nextTab);
-        tab->selectedTabIdx = tab->nextTab;
-        // send notification that the tab is selected
-        nmhdr.code = TCN_SELCHANGE;
-        TabsOnNotify(win, (LPARAM)&nmhdr);
-    }
+    return;
 }
 
 void CreateTabbar(WindowInfo* win) {
     TabsCtrl2* tabsCtrl = new TabsCtrl2(win->hwndFrame);
-    tabsCtrl->ctrlID = IDC_TABBAR;
     tabsCtrl->Create();
 
     HWND hwndTabBar = tabsCtrl->hwnd;
 
     tabsCtrl->onNotify = [win](WmNotifyEvent* ev) {
-        TabNotification(win, ev->code, 0, 0);
-        // TabsOnNotify(win, ev->lp);
+        if (!WindowInfoStillValid(win)) {
+            return;
+        }
+        TabsOnNotify(win, ev);
     };
 
     Size tabSize = GetTabSize(win->hwndFrame);
@@ -203,23 +234,11 @@ void TabsOnChangedDoc(WindowInfo* win) {
         return;
     }
 
-    CrashIf(win->tabs.Find(tab) != win->tabsCtrl->GetSelectedTabIndex());
+    int idx = win->tabs.Find(tab);
+    int selectedIdx = win->tabsCtrl->GetSelectedTabIndex();
+    CrashIf(idx != selectedIdx);
     VerifyTabInfo(win, tab);
     SetTabTitle(tab);
-}
-
-static void RemoveTab(WindowInfo* win, int idx) {
-    TabInfo* tab = win->tabs.at(idx);
-    UpdateTabFileDisplayStateForTab(tab);
-    win->tabSelectionHistory->Remove(tab);
-    win->tabs.Remove(tab);
-    if (tab == win->currentTab) {
-        win->ctrl = nullptr;
-        win->currentTab = nullptr;
-    }
-    delete tab;
-    win->tabsCtrl->RemoveTab(idx);
-    UpdateTabWidth(win);
 }
 
 // Called when we're closing a document
@@ -255,43 +274,6 @@ void TabsOnCloseWindow(WindowInfo* win) {
     win->currentTab = nullptr;
     win->ctrl = nullptr;
     DeleteVecMembers(win->tabs);
-}
-
-// On tab selection, we save the data for the tab which is losing selection and
-// load the data of the selected tab into the WindowInfo.
-LRESULT TabsOnNotify(WindowInfo* win, LPARAM lp, int tab1, int tab2) {
-    LPNMHDR data = (LPNMHDR)lp;
-    int current;
-
-    switch (data->code) {
-        case TCN_SELCHANGING:
-            // TODO: Should we allow the switch of the tab if we are in process of printing?
-            SaveCurrentTabInfo(win);
-            return FALSE;
-
-        case TCN_SELCHANGE:
-            current = win->tabsCtrl->GetSelectedTabIndex();
-            LoadModelIntoTab(win->tabs.at(current));
-            break;
-
-        case T_CLOSING:
-            // allow the closure
-            return FALSE;
-
-        case T_CLOSE:
-            current = win->tabsCtrl->GetSelectedTabIndex();
-            if (tab1 == current) {
-                CloseTab(win);
-            } else {
-                RemoveTab(win, tab1);
-            }
-            break;
-
-        case T_DRAG:
-            SwapTabs(win, tab1, tab2);
-            break;
-    }
-    return TRUE;
 }
 
 static void ShowTabBar(WindowInfo* win, bool show) {
@@ -350,18 +332,22 @@ void TabsSelect(WindowInfo* win, int tabIndex) {
     if (count < 2 || tabIndex < 0 || tabIndex >= count) {
         return;
     }
+#if 0
     NMHDR ntd = {nullptr, 0, TCN_SELCHANGING};
     if (TabsOnNotify(win, (LPARAM)&ntd)) {
         return;
     }
+#endif
     win->currentTab = win->tabs.at(tabIndex);
     AutoFree path = strconv::WstrToUtf8(win->currentTab->filePath);
     logf("TabsSelect: tabIndex: %d, new win->currentTab: 0x%p, path: '%s'\n", tabIndex, win->currentTab, path.Get());
     int prevIdx = win->tabsCtrl->SetSelectedTabByIndex(tabIndex);
+#if 0
     if (prevIdx != -1) {
         ntd.code = TCN_SELCHANGE;
         TabsOnNotify(win, (LPARAM)&ntd);
     }
+#endif
 }
 
 // Selects the next (or previous) tab.
